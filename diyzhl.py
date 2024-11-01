@@ -192,6 +192,7 @@ def arr( d0 = 1.0, dt = 1.0, t = 1, Q = 0.79 ) :
 # (Intermediate variables b/c I was playing with rounding)
 #
 
+# Palv = 0.7451
 def schreiner( Pi = 0.7451, Palv = 0.7451, t = 1, R = 0, k = 0.1386, verbose = False ) :
 
     assert float( k ) != 0.0
