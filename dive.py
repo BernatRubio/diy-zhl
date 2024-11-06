@@ -110,3 +110,29 @@ class Dive( object ) :
         if self._verbose :
             sys.stdout.write( "* At time %f, P %f:\n" % (self._T, self._P,) )
             pprint.pprint( self._TCs )
+    
+    def ndl(self, rate):
+        import copy
+        tmp_object = copy.deepcopy(self)
+        exit_while = False
+        iter_minutes = 0
+        iter_seconds = 0
+        step = 0
+        obj_minutes = int(tmp_object._T)
+        obj_seconds = int((tmp_object._T % 1) * 60)
+        
+        while True:
+            step+=15
+            iter_minutes = int(step / 60)
+            iter_seconds = step % 60
+            pressure = tmp_object._P - tmp_object._S
+            
+            tmp_object.segment(pressure + rate*0.2, f"{obj_minutes + iter_minutes}:{obj_seconds + iter_seconds}")
+            
+            for ceiling in tmp_object.ceilings:
+                if ceiling > 1:
+                    exit_while = True
+                    break
+            if exit_while:
+                break
+        return ((step - 15) / 60.0)
