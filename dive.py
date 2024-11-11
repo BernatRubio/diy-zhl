@@ -94,7 +94,7 @@ class Dive( object ) :
     
         for i in range( len( self._TCs ) ) :
             p = diyzhl.schreiner( Pi = self._TCs[i]["P"], 
-                          Palv = diyzhl.palv( Pamb = self._P, Q = self._Q, RQ = self._RQ ), 
+                          Palv = diyzhl.palv( Pamb = newP, Q = self._Q, RQ = self._RQ ), 
                           t = t, 
                           R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._Q ),
                           k = diyzhl.kay( Th = self._TCs[i]["t"] ) )
