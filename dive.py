@@ -10,7 +10,7 @@ class Dive( object ) :
     def __init__( self, verbose = False ) :
 
         self._verbose = bool( verbose )
-        self._timepat = re.compile( r"(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})" )
+        self._timepat = re.compile( r"(\d{1,3}):(\d{1,2})" )
         
 # air, sea level, USN RQ. S is surface pressure (const), P is current pressure (var)
         self._T = 0
@@ -75,10 +75,8 @@ class Dive( object ) :
         m = self._timepat.search( str( t ).strip() )
         if not m : raise Exception( "Invalid time string %s" % (t,) )
         rc = 0.0
-        if m.group( 1 ) is not None :
-            rc = float( m.group( 1 ) ) * 60.0
-        rc += float( m.group( 2 ) )
-        rc += float( m.group( 3 ) ) / 60.0
+        rc += float( m.group( 1 ) )
+        rc += float( m.group( 2 ) ) / 60.0
         return round( rc, 1 )
 
     # newdepth is new depth in bar
@@ -87,7 +85,7 @@ class Dive( object ) :
     def segment( self, newdepth = 0.0, newtimestr = "1:0" ) :
         assert float( newdepth ) >= 0.0
         if float( newdepth ) == 0.0 :
-            newP = self._P
+            newP = self._S
         else :
             newP = round( self._S + float( newdepth ), 1 )
         t = self._time( newtimestr ) - self._T
@@ -126,6 +124,11 @@ class Dive( object ) :
             iter_minutes = int(step / 60)
             iter_seconds = step % 60
             pressure = tmp_object._P - tmp_object._S
+            # print(f"minutes: {iter_minutes}")
+            # print(f"seconds: {iter_seconds}")
+            
+            if (iter_minutes >= 100):
+                return 100
             
             tmp_object.segment(pressure + rate*0.2, f"{obj_minutes + iter_minutes}:{obj_seconds + iter_seconds}")
             
@@ -136,3 +139,22 @@ class Dive( object ) :
             if exit_while:
                 break
         return ((step - 15) / 60.0)
+    
+    def safety_stop(self):
+        import math
+        max_ceiling = max(self.ceilings)
+        
+        # Adjust max_ceiling to the closest multiple of 0.3 from 1.3 upwards
+        # Ensure that the smallest possible value is 1.3 (i.e., the base multiple)
+        if max_ceiling < 1.3:
+            max_ceiling = 1.3
+        else:
+            max_ceiling = math.ceil((max_ceiling - 1.3) / 0.3) * 0.3 + 1.3
+        
+        max_ceiling = round(max_ceiling, 2)  # Ensure precision to two decimal places
+        
+        return max_ceiling
+
+
+
+
