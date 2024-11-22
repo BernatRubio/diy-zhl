@@ -20,6 +20,7 @@ class Dive( object ) :
         self._RQ = 1.0
         self._GFHi = 1
         self._TCs = []
+        self._FSD = 0
 
 # starting Pt (same for all TCs)
         sp = diyzhl.palv( Pamb = self._P, Q = self._Q, RQ = self._RQ )
