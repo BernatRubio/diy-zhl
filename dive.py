@@ -18,8 +18,10 @@ class Dive( object ) :
         self._P = self._S
         self._Q = 0.79
         self._RQ = 1.0
-        self._GFHi = 1
+        self._GFHi = 0.8
+        self._GFLo = 0.3
         self._TCs = []
+        self._FSD = None
 
 # starting Pt (same for all TCs)
         sp = diyzhl.palv( Pamb = self._P, Q = self._Q, RQ = self._RQ )
@@ -36,10 +38,15 @@ class Dive( object ) :
 
 # init. ceiling
         for i in range( len( self._TCs ) ) :
+            self._TCs[i]["F"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
+                                        an = self._TCs[i]["a"],
+                                        bn = self._TCs[i]["b"],
+                                        gf = self._GFLo )
+        for i in range( len( self._TCs ) ) :
             self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
                                          an = self._TCs[i]["a"],
                                          bn = self._TCs[i]["b"],
-                                         gf = self._GFHi )
+                                         gf = self._GFLo )
             
         if self._verbose :
             pprint.pprint( self._TCs )
@@ -67,6 +74,23 @@ class Dive( object ) :
         for i in range( len( self._TCs ) ) :
             rc.append( self._TCs[i]["C"] )
         return rc
+    
+    @property
+    def fsd( self ) :
+        rc = []
+        for i in range( len( self._TCs ) ) :
+            rc.append( self._TCs[i]["F"] )
+        fsd = self._FSD
+        if fsd:
+            if fsd <= self._P:
+                rc = max(rc)
+                self._FSD = rc
+            elif fsd > self._P:
+                return fsd
+        else:
+            rc = max(rc)
+            self._FSD = rc
+        return rc
 
     # helper function: takes human-readable time string like "1:30" and returns minutes: 1.5
     #
@@ -83,6 +107,8 @@ class Dive( object ) :
     # timestr is time as [hours:]minutes:seconds string. *it is the total elapsed* time
     #
     def segment( self, newdepth = 0.0, newtimestr = "1:0" ) :
+        FINAL_STOP_DEPTH = 1.0 # In atm
+        SURFACE_PRESSURE = 1.0
         assert float( newdepth ) >= 0.0
         if float( newdepth ) == 0.0 :
             newP = self._S
@@ -97,15 +123,27 @@ class Dive( object ) :
                           R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._Q ),
                           k = diyzhl.kay( Th = self._TCs[i]["t"] ) )
             self._TCs[i]["P"] = p
+            
+            if newP >= self._TCs[i]["F"]:
+                self._TCs[i]["F"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
+                                            an = self._TCs[i]["a"],
+                                            bn = self._TCs[i]["b"],
+                                            gf = self._GFLo )
+            gf_slope = (self._GFHi - self._GFLo) / (FINAL_STOP_DEPTH - self.fsd)
+            val = self.fsd
+            gf = (gf_slope * (newP - SURFACE_PRESSURE)) + self._GFHi
+            gf = gf if gf > self._GFLo else self._GFLo
+            #print(f"Gradient factor at depth {newP} with fsd {val}: {gf}") 
             self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
                                          an = self._TCs[i]["a"],
                                          bn = self._TCs[i]["b"],
-                                         gf = self._GFHi )
+                                         gf = gf )
 
         self._P = newP
         self._T += t
     
         if self._verbose :
+            import sys
             sys.stdout.write( "* At time %f, P %f:\n" % (self._T, self._P,) )
             pprint.pprint( self._TCs )
     
@@ -142,6 +180,7 @@ class Dive( object ) :
     
     def safety_stop(self):
         import math
+        print(self.ceilings)
         max_ceiling = max(self.ceilings)
         
         # Adjust max_ceiling to the closest multiple of 0.3 from 1.3 upwards
