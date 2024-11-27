@@ -1,0 +1,15 @@
+from dive import Dive
+
+dive_obj = Dive()
+dive_obj.segment(2.0, f"{1}:0")
+dive_obj.segment(2.0, f"{20}:0")
+print(dive_obj.safety_stop())
+dive_obj.segment(0.6, f"{21}:{45}")
+print(dive_obj.safety_stop())
+dive_obj.segment(0.6, f"{23}:0")
+print(dive_obj.safety_stop())
+dive_obj.segment(0.3, f"{23}:{30}")
+print(dive_obj.safety_stop())
+dive_obj.segment(0.3, f"{24}:0")
+print(dive_obj.safety_stop())
+dive_obj.segment(0.0, f"{24}:{30}")

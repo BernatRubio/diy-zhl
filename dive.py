@@ -184,7 +184,7 @@ class Dive( object ) :
         max_ceiling = round(max_ceiling, 2)  # Ensure precision to two decimal places
         
         if (self._P <= max_ceiling):
-            if max_ceiling not in self._Deco_Stops:
+            if max_ceiling not in self._Deco_Stops and max_ceiling != 1.0:
                 self._Deco_Stops.append(max_ceiling)
             
             first_stop_depth = deco_stops[0]
