@@ -20,8 +20,10 @@ class Dive( object ) :
         self._RQ = 1.0
         self._GFHi = 0.8
         self._GFLo = 0.3
+        self._GF = self._GFLo
         self._TCs = []
         self._FSD = None
+        self._Deco_Stops = []
 
 # starting Pt (same for all TCs)
         sp = diyzhl.palv( Pamb = self._P, Q = self._Q, RQ = self._RQ )
@@ -107,8 +109,6 @@ class Dive( object ) :
     # timestr is time as [hours:]minutes:seconds string. *it is the total elapsed* time
     #
     def segment( self, newdepth = 0.0, newtimestr = "1:0" ) :
-        FINAL_STOP_DEPTH = 1.0 # In atm
-        SURFACE_PRESSURE = 1.0
         assert float( newdepth ) >= 0.0
         if float( newdepth ) == 0.0 :
             newP = self._S
@@ -123,21 +123,11 @@ class Dive( object ) :
                           R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._Q ),
                           k = diyzhl.kay( Th = self._TCs[i]["t"] ) )
             self._TCs[i]["P"] = p
-            
-            if newP >= self._TCs[i]["F"]:
-                self._TCs[i]["F"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
-                                            an = self._TCs[i]["a"],
-                                            bn = self._TCs[i]["b"],
-                                            gf = self._GFLo )
-            gf_slope = (self._GFHi - self._GFLo) / (FINAL_STOP_DEPTH - self.fsd)
-            val = self.fsd
-            gf = (gf_slope * (newP - SURFACE_PRESSURE)) + self._GFHi
-            gf = gf if gf > self._GFLo else self._GFLo
-            #print(f"Gradient factor at depth {newP} with fsd {val}: {gf}") 
+             
             self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
                                          an = self._TCs[i]["a"],
                                          bn = self._TCs[i]["b"],
-                                         gf = gf )
+                                         gf = self._GF )
 
         self._P = newP
         self._T += t
@@ -180,17 +170,27 @@ class Dive( object ) :
     
     def safety_stop(self):
         import math
-        print(self.ceilings)
         max_ceiling = max(self.ceilings)
+        deco_stops = self._Deco_Stops
+        final_stop_depth = 1.0
         
         # Adjust max_ceiling to the closest multiple of 0.3 from 1.3 upwards
         # Ensure that the smallest possible value is 1.3 (i.e., the base multiple)
-        if max_ceiling < 1.3:
-            max_ceiling = 1.3
+        if max_ceiling <= 1.0:
+            max_ceiling = 1.0
         else:
             max_ceiling = math.ceil((max_ceiling - 1.3) / 0.3) * 0.3 + 1.3
         
         max_ceiling = round(max_ceiling, 2)  # Ensure precision to two decimal places
+        
+        if (self._P <= max_ceiling):
+            if max_ceiling not in self._Deco_Stops:
+                self._Deco_Stops.append(max_ceiling)
+            
+            first_stop_depth = deco_stops[0]
+            gf_slope = (self._GFHi - self._GFLo) / (final_stop_depth - first_stop_depth)
+            gf = (gf_slope * (max_ceiling - final_stop_depth)) + self._GFHi
+            self._GF = round(gf,3)
         
         return max_ceiling
 
