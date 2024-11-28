@@ -16,7 +16,8 @@ class Dive( object ) :
         self._T = 0
         self._S = 1.0
         self._P = self._S
-        self._Q = 0.79
+        self._N = 0.79
+        self._He = 0.79 - self._N
         self._RQ = 1.0
         self._GFHi = 0.8
         self._GFLo = 0.3
@@ -26,28 +27,32 @@ class Dive( object ) :
         self._Deco_Stops = []
 
 # starting Pt (same for all TCs)
-        sp = diyzhl.palv( Pamb = self._P, Q = self._Q, RQ = self._RQ )
+        sp = diyzhl.palv( Pamb = self._P, Q = 0.79, RQ = self._RQ )
 
 # use ZH-L16Cb (skip over 4-minute TC)
         for tc in diyzhl.ZHL16N.keys() :
             if tc == 1 : continue
             self._TCs.append( { 
-                "t" : diyzhl.ZHL16N[tc]["t"], 
-                "a" : diyzhl.ZHL16N[tc]["a"]["C"],
-                "b" : diyzhl.ZHL16N[tc]["b"],
-                "P" : sp
+                'n': { 
+                    "t" : diyzhl.ZHL16N[tc]["t"], 
+                    "a" : diyzhl.ZHL16N[tc]["a"]["C"],
+                    "b" : diyzhl.ZHL16N[tc]["b"],
+                    "P" : sp
+                },
+                
+                'h': {
+                    "t" : diyzhl.ZHL16He[tc]["t"], 
+                    "a" : diyzhl.ZHL16He[tc]["a"]["B"],
+                    "b" : diyzhl.ZHL16He[tc]["b"],
+                    "P" : 0
+                }
             } )
 
 # init. ceiling
         for i in range( len( self._TCs ) ) :
-            self._TCs[i]["F"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
-                                        an = self._TCs[i]["a"],
-                                        bn = self._TCs[i]["b"],
-                                        gf = self._GFLo )
-        for i in range( len( self._TCs ) ) :
-            self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
-                                         an = self._TCs[i]["a"],
-                                         bn = self._TCs[i]["b"],
+            self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["n"]["P"],
+                                         an = self._TCs[i]["n"]["a"],
+                                         bn = self._TCs[i]["n"]["b"],
                                          gf = self._GFLo )
             
         if self._verbose :
@@ -117,16 +122,28 @@ class Dive( object ) :
         t = self._time( newtimestr ) - self._T
     
         for i in range( len( self._TCs ) ) :
-            p = diyzhl.schreiner( Pi = self._TCs[i]["P"], 
-                          Palv = diyzhl.palv( Pamb = newP, Q = self._Q, RQ = self._RQ ), 
+            pn = diyzhl.schreiner( Pi = self._TCs[i]["n"]["P"], 
+                          Palv = diyzhl.palv( Pamb = newP, Q = self._N, RQ = self._RQ ), 
                           t = t, 
-                          R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._Q ),
-                          k = diyzhl.kay( Th = self._TCs[i]["t"] ) )
-            self._TCs[i]["P"] = p
+                          R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._N ),
+                          k = diyzhl.kay( Th = self._TCs[i]["n"]["t"] ) )
+            
+            self._TCs[i]["n"]["P"] = pn
+            
+            ph = diyzhl.schreiner( Pi = self._TCs[i]["h"]["P"], 
+                          Palv = diyzhl.palv( Pamb = newP, Q = self._He, RQ = self._RQ ), 
+                          t = t, 
+                          R = diyzhl.arr( d0 = self._P, dt = newP, t = t, Q = self._He ),
+                          k = diyzhl.kay( Th = self._TCs[i]["h"]["t"] ) )
+            
+            self._TCs[i]["h"]["P"] = ph
              
-            self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["P"],
-                                         an = self._TCs[i]["a"],
-                                         bn = self._TCs[i]["b"],
+            self._TCs[i]["C"] = diyzhl.buhlmann( Pn = self._TCs[i]["n"]["P"],
+                                         an = self._TCs[i]["n"]["a"],
+                                         bn = self._TCs[i]["n"]["b"],
+                                         Phe = self._TCs[i]["h"]["P"],
+                                         ahe = self._TCs[i]["h"]["a"],
+                                         bhe = self._TCs[i]["h"]["b"],
                                          gf = self._GF )
 
         self._P = newP
@@ -144,6 +161,7 @@ class Dive( object ) :
         iter_minutes = 0
         iter_seconds = 0
         step = 0
+        step_time = 0.25
         obj_minutes = int(tmp_object._T)
         obj_seconds = int((tmp_object._T % 1) * 60)
         
@@ -152,13 +170,11 @@ class Dive( object ) :
             iter_minutes = int(step / 60)
             iter_seconds = step % 60
             pressure = tmp_object._P - tmp_object._S
-            # print(f"minutes: {iter_minutes}")
-            # print(f"seconds: {iter_seconds}")
             
             if (iter_minutes >= 100):
                 return 100
             
-            tmp_object.segment(pressure + rate*0.2, f"{obj_minutes + iter_minutes}:{obj_seconds + iter_seconds}")
+            tmp_object.segment(pressure + (rate*step_time), f"{obj_minutes + iter_minutes}:{obj_seconds + iter_seconds}")
             
             for ceiling in tmp_object.ceilings:
                 if ceiling > 1:
@@ -173,11 +189,12 @@ class Dive( object ) :
         max_ceiling = max(self.ceilings)
         deco_stops = self._Deco_Stops
         final_stop_depth = 1.0
+        surface_pressure = 1.0
         
         # Adjust max_ceiling to the closest multiple of 0.3 from 1.3 upwards
         # Ensure that the smallest possible value is 1.3 (i.e., the base multiple)
-        if max_ceiling <= 1.0:
-            max_ceiling = 1.0
+        if max_ceiling <= surface_pressure:
+            max_ceiling = surface_pressure
         else:
             max_ceiling = math.ceil((max_ceiling - 1.3) / 0.3) * 0.3 + 1.3
         
